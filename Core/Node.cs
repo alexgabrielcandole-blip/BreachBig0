@@ -3,6 +3,14 @@
 /// <summary>Colors the terminal can print in (Form1 maps these to real colors).</summary>
 public enum TermColor { Normal, Player, Warn, Error, Dim, Success }
 
+/// <summary>Result of one typed answer in a multi-step challenge.</summary>
+public enum Verdict
+{
+    Wrong,      // invalid or incorrect: the node already said why; costs trace
+    Continue,   // valid step, challenge not finished (the node already gave feedback)
+    Solved      // challenge finished: move on
+}
+
 /// <summary>Everything a Node is allowed to ask the window to do.</summary>
 public interface INodeHost
 {
@@ -15,20 +23,30 @@ public interface INodeHost
 
 /// <summary>
 /// One challenge: what to show, how to check the answer, what to say when solved.
+/// Single-answer challenges use Validate. Multi-step challenges use Judge.
 /// </summary>
 public class Question
 {
     /// <summary>Prints the challenge. Must be safe to call again (the 'help' command re-shows it).</summary>
     public Action Ask { get; init; } = () => { };
 
-    /// <summary>Returns null if the answer is correct, otherwise the feedback message.</summary>
+    /// <summary>Single answer: returns null if correct, otherwise the feedback message.</summary>
     public Func<string, string?> Validate { get; init; } = _ => null;
 
-    /// <summary>Runs once, right after a correct answer (show the "run", the aha moment).</summary>
+    /// <summary>
+    /// Multi-step challenge (used instead of Validate when set). The node prints its own
+    /// feedback and returns Wrong, Continue or Solved.
+    /// </summary>
+    public Func<string, Verdict>? Judge { get; init; }
+
+    /// <summary>Runs once, right after the challenge is solved (show the "run", the aha moment).</summary>
     public Action? Solved { get; init; }
 
-    /// <summary>Hints in order. Each one the player asks for costs trace.</summary>
+    /// <summary>Fixed hints in order. Each one the player asks for costs trace.</summary>
     public string[] Hints { get; init; } = Array.Empty<string>();
+
+    /// <summary>Dynamic hints (they can use the current state). Return null when out of hints.</summary>
+    public Func<int, string?>? HintProvider { get; init; }
 }
 
 /// <summary>
@@ -41,7 +59,7 @@ public abstract class Node
 
     private readonly List<Question> _questions = new();
     private int _index;        // which question the player is on
-    private int _hintsUsed;    // hints used on the current question
+    private int _hintsUsed;    // hints used on the current question (or step)
 
     public abstract int Number { get; }
     public abstract string Title { get; }
@@ -77,16 +95,27 @@ public abstract class Node
             return;
         }
 
-        string? error = _questions[_index].Validate(input);
-        if (error != null)
+        Question q = _questions[_index];
+
+        if (q.Judge != null)
         {
-            Say(error, TermColor.Error);
-            Say($"[TRACE +{TraceMeter.WrongAnswerCost}%]", TermColor.Dim);
-            Host.Trace.Add(TraceMeter.WrongAnswerCost);
-            return;
+            // Multi-step challenge: the node decides what happens.
+            Verdict verdict = q.Judge(input);
+            if (verdict == Verdict.Wrong) { PenalizeWrong(); return; }
+            if (verdict == Verdict.Continue) return;
+        }
+        else
+        {
+            string? error = q.Validate(input);
+            if (error != null)
+            {
+                Say(error, TermColor.Error);
+                PenalizeWrong();
+                return;
+            }
         }
 
-        _questions[_index].Solved?.Invoke();
+        q.Solved?.Invoke();
         _index++;
         _hintsUsed = 0;
 
@@ -102,17 +131,20 @@ public abstract class Node
             return;
         }
 
-        string[] hints = _questions[_index].Hints;
-        if (_hintsUsed >= hints.Length)
+        Question q = _questions[_index];
+        string? hint = q.HintProvider != null
+            ? q.HintProvider(_hintsUsed)
+            : (_hintsUsed < q.Hints.Length ? q.Hints[_hintsUsed] : null);
+
+        if (hint == null)
         {
             Say("[HINT] No more hints for this challenge.", TermColor.Dim);
             return;
         }
 
-        Say("[HINT] " + hints[_hintsUsed], TermColor.Warn);
-        Say($"[TRACE +{TraceMeter.HintCost}%]", TermColor.Dim);
+        Say("[HINT] " + hint, TermColor.Warn);
         _hintsUsed++;
-        Host.Trace.Add(TraceMeter.HintCost);
+        AddTrace(TraceMeter.HintCost);
     }
 
     /// <summary>Re-shows the current challenge (used by 'help').</summary>
@@ -138,8 +170,20 @@ public abstract class Node
         Host.SetNext("type 'next' to move on.");
     }
 
+    private void PenalizeWrong() => AddTrace(TraceMeter.WrongAnswerCost);
+
     // ----- Helpers for the nodes -----
     protected void Say(string text = "", TermColor color = TermColor.Normal) => Host.Print(text, color);
+
+    /// <summary>Raises the trace meter and tells the player why.</summary>
+    protected void AddTrace(int amount, string reason = "")
+    {
+        Say($"[TRACE +{amount}%]" + (reason.Length > 0 ? " " + reason : ""), TermColor.Dim);
+        Host.Trace.Add(amount);
+    }
+
+    /// <summary>Lets the player use hints again (call it when a multi-step challenge moves on).</summary>
+    protected void ResetHints() => _hintsUsed = 0;
 
     /// <summary>Simulates running code: the step counter shows what that run cost.</summary>
     protected void Run(int steps)
