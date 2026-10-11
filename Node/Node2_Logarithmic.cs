@@ -75,7 +75,8 @@ public class Node2_Logarithmic : Node
             Ask = AskGate,
             Judge = JudgeGate,
             HintProvider = GateHint,
-            Solved = GateSolved
+            Solved = GateSolved,
+            Reveal = RevealGate
         };
 
         // 2) Keep dividing by 2 (PDF example 2): predict the loop count for 3 sizes.
@@ -84,7 +85,8 @@ public class Node2_Logarithmic : Node
             Ask = AskHalving,
             Judge = JudgeHalving,
             HintProvider = HalvingHint,
-            Solved = HalvingSolved
+            Solved = HalvingSolved,
+            Reveal = RevealHalving
         };
 
         // 3) Guessing 1-100 (PDF example 3, fixed: it now has a real target).
@@ -93,7 +95,8 @@ public class Node2_Logarithmic : Node
             Ask = AskSphinx,
             Judge = JudgeSphinx,
             HintProvider = SphinxHint,
-            Solved = SphinxSolved
+            Solved = SphinxSolved,
+            Reveal = RevealSphinx
         };
 
         // 4) Name the Big-O.
@@ -110,10 +113,11 @@ public class Node2_Logarithmic : Node
                 return "Write it like O(...), for example O(n) or O(1).";
             },
             Solved = () => Say("Correct: O(log n) = logarithmic time.", TermColor.Success),
+            Reveal = RevealBigO,
             Hints = new[]
             {
                 "Halving again and again is the opposite of doubling: it's a logarithm.",
-                "A logarithm is written log. Put n inside it: O(log n)."
+                "A logarithm is written log, and the data size is n. Both go inside O( )."
             }
         };
     }
@@ -185,7 +189,7 @@ public class Node2_Logarithmic : Node
     private string? GateHint(int i) => i switch
     {
         0 => "The middle position is (left + right) / 2. C# drops decimals: 7 / 2 = 3.",
-        1 => $"Right now left = {_left} and right = {_right}: ({_left} + {_right}) / 2 = {(_left + _right) / 2}.",
+        1 => $"Right now left = {_left} and right = {_right}. Add them, halve, and drop any decimals.",
         _ => null
     };
 
@@ -193,6 +197,46 @@ public class Node2_Logarithmic : Node
     {
         Say($"Found in {_checks} checks. A scan could have needed up to {ListSize}.");
         Say("Each check threw away half of what was left.");
+    }
+
+    // BRUTE FORCE: show the answer, the slow scan's cost, and the halving path.
+    private void RevealGate()
+    {
+        int pos = Array.IndexOf(_pins, _targetValue);
+        Say($"ANSWER: {_targetValue} is at position {pos}.", TermColor.Success);
+
+        Run(pos + 1);
+        Say($"Brute force scans from the start: pins[0] ... pins[{pos}]  ->  {pos + 1} steps.", TermColor.Success);
+        Say("Binary search checks the middle of the range each time:");
+
+        int left = 0;
+        int right = ListSize - 1;
+        int checks = 0;
+        while (left <= right)
+        {
+            int middle = (left + right) / 2;
+            int value = _pins[middle];
+            checks++;
+
+            if (value == _targetValue)
+            {
+                Say($"  ({left} + {right}) / 2 = {middle}  ->  pins[{middle}] = {value}  FOUND");
+                break;
+            }
+            if (value < _targetValue)
+            {
+                Say($"  ({left} + {right}) / 2 = {middle}  ->  pins[{middle}] = {value}  too low, left = {middle + 1}");
+                left = middle + 1;
+            }
+            else
+            {
+                Say($"  ({left} + {right}) / 2 = {middle}  ->  pins[{middle}] = {value}  too high, right = {middle - 1}");
+                right = middle - 1;
+            }
+        }
+
+        Say($"Here: scan {pos + 1} steps (worst case {ListSize}) vs binary search {checks} checks");
+        Say($"(never more than {BestSearch}). The gap explodes as the list grows.");
     }
 
     // ================= Challenge 2: Halving Hall =================
@@ -268,6 +312,22 @@ public class Node2_Logarithmic : Node
         int last = HalvingSizes[^1];
         Say($"n grew {last / first}x ({first} to {last:N0}), but the steps only went from {Halvings(first)} to {Halvings(last)}.",
             TermColor.Success);
+    }
+
+    // BRUTE FORCE: all three answers with their chains, and the pattern behind them.
+    private void RevealHalving()
+    {
+        Say("ANSWERS:", TermColor.Success);
+        foreach (int n in HalvingSizes)
+            Say($"  n = {n,5:N0}:  {HalvingChain(n)}   [{Halvings(n)} steps]", TermColor.Success);
+
+        Say("Every pass halves n, so the loop runs about log2(n) times:");
+        Say("  " + string.Join(",  ", HalvingSizes.Select(n => $"2^{Halvings(n)} = {n:N0}")));
+
+        int last = HalvingSizes[^1];
+        Run(Halvings(last));
+        Host.SetBest(Halvings(last));
+        HalvingSolved();
     }
 
     private static int Halvings(int n)
@@ -349,7 +409,7 @@ public class Node2_Logarithmic : Node
     private string? SphinxHint(int i) => i switch
     {
         0 => "Don't guess 1, 2, 3... Guess the MIDDLE of the numbers still possible.",
-        1 => $"Still possible: {_low} to {_high}. The middle is ({_low} + {_high}) / 2 = {(_low + _high) / 2}.",
+        1 => $"Still possible: {_low} to {_high}. Try ({_low} + {_high}) / 2 and guess that.",
         _ => null
     };
 
@@ -362,6 +422,18 @@ public class Node2_Logarithmic : Node
         Say("  if (middle == target) break;");
         Say("  else if (middle < target) low = middle + 1;");
         Say("  else high = middle - 1;");
+    }
+
+    // BRUTE FORCE: the PIN, what guessing 1, 2, 3... would cost, and the halving path.
+    private void RevealSphinx()
+    {
+        Say($"ANSWER: the PIN is {_secret}.", TermColor.Success);
+
+        Run(_secret);
+        Say($"Brute force (guess 1, 2, 3...) would take {_secret} guesses.", TermColor.Success);
+        Say("Halving the range each time:");
+        Say("  " + HalvingPath(_secret));
+        Say($"Never more than {BestGuess} guesses for 1 to {GuessMax}.");
     }
 
     private static string HalvingPath(int target)
@@ -389,6 +461,13 @@ public class Node2_Logarithmic : Node
         Say("Last check. Each check throws away HALF of the data.");
         Say("Type the Big-O of binary search.");
         Host.SetNext("type the Big-O of binary search (written like O(n) or O(1)).");
+    }
+
+    private void RevealBigO()
+    {
+        Say("ANSWER: O(log n)", TermColor.Success);
+        Say("Each check halves the data: n -> n/2 -> n/4 -> ... -> 1.");
+        Say("The number of halvings is log2(n), so 1,000,000 entries need about 20 checks.");
     }
 
     // ================= Summary =================
