@@ -24,9 +24,11 @@ public partial class Form1 : Form, INodeHost
         host => new Node2_Logarithmic(host),
     };
 
-    private Node? _node;        // the node being played
-    private int _nodeIndex;     // its position in _nodeFactories
-    private int? _best;         // "best" value shown in the side panel
+    private Node? _node;                // the node being played
+    private int _nodeIndex;             // its position in _nodeFactories
+    private int? _best;                 // "best" value shown in the side panel
+    private string _nextText = "";      // text of the NEXT bar (so we can restore it)
+    private bool _awaitingBrute;        // true while we wait for the player to type 'yes'
 
     public Form1()
     {
@@ -37,7 +39,7 @@ public partial class Form1 : Form, INodeHost
 
     private void Form1_Load(object? sender, EventArgs e)
     {
-        PrintLine("BREACH v0.2  //  Big-O Terminal", Green);
+        PrintLine("BREACH v0.3  //  Big-O Terminal", Green);
         PrintLine("Break into 5 systems. Each one runs on a different Big-O class.", White);
         PrintLine("Type answers at the prompt. Type 'help' any time.", White);
         StartNode(0);
@@ -63,12 +65,38 @@ public partial class Form1 : Form, INodeHost
         txtInput.Focus();
     }
 
+    // The BRUTE FORCE button is the same as typing "bruteforce".
+    private void btnBrute_Click(object? sender, EventArgs e)
+    {
+        HandleCommand("bruteforce");
+        txtInput.Focus();
+    }
+
     private void HandleCommand(string raw)
     {
         string cmd = raw.Trim();
         if (cmd.Length == 0 || _node == null) return;
 
         PrintLine($"{_node.Prompt} {cmd}", White);   // echo what the player typed
+
+        // Waiting for the brute force confirmation?
+        if (_awaitingBrute)
+        {
+            _awaitingBrute = false;
+            ShowNextBar();
+            string reply = cmd.ToLowerInvariant();
+
+            if (reply == "yes" || reply == "y")
+            {
+                _node.BruteForce();
+                if (_trace.IsFull) Traced();
+                return;
+            }
+
+            PrintLine("Brute force cancelled.", Amber);
+            if (reply == "no" || reply == "n") return;
+            // anything else: carry on and treat it as a normal command/answer
+        }
 
         switch (cmd.ToLowerInvariant())
         {
@@ -79,6 +107,11 @@ public partial class Form1 : Form, INodeHost
             case "hint":
                 _node.ShowHint();
                 break;
+
+            case "bruteforce":
+            case "brute":
+                AskBruteForce();
+                return;
 
             case "next":
                 GoNext();
@@ -104,12 +137,44 @@ public partial class Form1 : Form, INodeHost
     private void ShowHelp()
     {
         PrintLine("Commands:", Green);
-        PrintLine("  hint     get a clue (+5% trace)", Green);
-        PrintLine("  next     go to the next node (after clearing this one)", Green);
-        PrintLine("  restart  start this node over", Green);
-        PrintLine("  clear    wipe the terminal", Green);
+        PrintLine("  hint        get a clue (+5% trace)", Green);
+        PrintLine("  bruteforce  reveal the answer + why (+25% trace, asks first)", Green);
+        PrintLine("  next        go to the next node (after clearing this one)", Green);
+        PrintLine("  restart     start this node over", Green);
+        PrintLine("  clear       wipe the terminal", Green);
         PrintLine("Anything else you type is treated as your answer.", Green);
         _node?.Repeat();                          // re-show the current challenge
+    }
+
+    // Brute force step 1: safety checks, then ask the player to confirm.
+    private void AskBruteForce()
+    {
+        if (_node == null) return;
+
+        if (_node.IsComplete)
+        {
+            PrintLine("Nothing to brute-force: this node is cleared. Type 'next'.", Amber);
+            return;
+        }
+
+        if (!_node.CanBruteForce)
+        {
+            PrintLine("Brute force isn't available for this challenge yet.", Amber);
+            return;
+        }
+
+        if (_trace.Level + Node.BruteForceCost >= TraceMeter.Max)
+        {
+            PrintLine($"Too risky: brute force costs +{Node.BruteForceCost}% and you're at {_trace.Level}%.", Red);
+            PrintLine("It would get you traced. Solve this one yourself, or 'restart' the node.", Amber);
+            return;
+        }
+
+        PrintLine("BRUTE FORCE reveals the answer and explains why, but it costs", Amber);
+        PrintLine($"+{Node.BruteForceCost}% trace ({_trace.Level}% -> {_trace.Level + Node.BruteForceCost}%).", Amber);
+        PrintLine("Type 'yes' to confirm, or anything else to cancel.", Amber);
+        lblNext.Text = "NEXT: type 'yes' to confirm brute force (anything else cancels).";
+        _awaitingBrute = true;
     }
 
     private void GoNext()
@@ -136,6 +201,7 @@ public partial class Form1 : Form, INodeHost
     private void StartNode(int index)
     {
         _nodeIndex = index;
+        _awaitingBrute = false;
         _steps.Reset();
         _trace.Reset();
         _best = null;
@@ -185,7 +251,13 @@ public partial class Form1 : Form, INodeHost
     }
 
     // Updates the always-visible "what do I do now" bar.
-    private void SetNext(string text) => lblNext.Text = "NEXT: " + text;
+    private void SetNext(string text)
+    {
+        _nextText = text;
+        ShowNextBar();
+    }
+
+    private void ShowNextBar() => lblNext.Text = "NEXT: " + _nextText;
 
     private static Color ToColor(TermColor c) => c switch
     {

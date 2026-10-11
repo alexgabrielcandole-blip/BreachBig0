@@ -47,6 +47,12 @@ public class Question
 
     /// <summary>Dynamic hints (they can use the current state). Return null when out of hints.</summary>
     public Func<int, string?>? HintProvider { get; init; }
+
+    /// <summary>
+    /// BRUTE FORCE: prints the answer AND why, and sets the step counter to the cost of
+    /// the slow route. Optional: a challenge without it can't be brute-forced.
+    /// </summary>
+    public Action? Reveal { get; init; }
 }
 
 /// <summary>
@@ -55,11 +61,15 @@ public class Question
 /// </summary>
 public abstract class Node
 {
+    /// <summary>Trace cost of the BRUTE FORCE button.</summary>
+    public const int BruteForceCost = 25;
+
     protected INodeHost Host { get; }
 
     private readonly List<Question> _questions = new();
-    private int _index;        // which question the player is on
-    private int _hintsUsed;    // hints used on the current question (or step)
+    private int _index;            // which question the player is on
+    private int _hintsUsed;        // hints used on the current question (or step)
+    private int _bruteForced;      // how many challenges were brute-forced
 
     public abstract int Number { get; }
     public abstract string Title { get; }
@@ -67,6 +77,10 @@ public abstract class Node
 
     public bool IsComplete { get; private set; }
     public string Prompt => $"root@node{Number}>";
+
+    /// <summary>True when the current challenge has a Reveal.</summary>
+    public bool CanBruteForce =>
+        !IsComplete && _index < _questions.Count && _questions[_index].Reveal != null;
 
     protected Node(INodeHost host)
     {
@@ -116,11 +130,7 @@ public abstract class Node
         }
 
         q.Solved?.Invoke();
-        _index++;
-        _hintsUsed = 0;
-
-        if (_index >= _questions.Count) Finish();
-        else AskCurrent();
+        MoveToNextQuestion();
     }
 
     public void ShowHint()
@@ -147,6 +157,25 @@ public abstract class Node
         AddTrace(TraceMeter.HintCost);
     }
 
+    /// <summary>
+    /// BRUTE FORCE: pays the trace cost, shows the answer and the explanation, and moves on.
+    /// Form1 asks the player to confirm before calling this.
+    /// </summary>
+    public void BruteForce()
+    {
+        if (!CanBruteForce)
+        {
+            Say("Brute force isn't available for this challenge.", TermColor.Dim);
+            return;
+        }
+
+        _bruteForced++;
+        Say("[BRUTE FORCE] Skipping the thinking...", TermColor.Warn);
+        AddTrace(BruteForceCost);
+        _questions[_index].Reveal!();
+        MoveToNextQuestion();
+    }
+
     /// <summary>Re-shows the current challenge (used by 'help').</summary>
     public void Repeat()
     {
@@ -154,6 +183,15 @@ public abstract class Node
     }
 
     // ----- Internals -----
+    private void MoveToNextQuestion()
+    {
+        _index++;
+        _hintsUsed = 0;
+
+        if (_index >= _questions.Count) Finish();
+        else AskCurrent();
+    }
+
     private void AskCurrent()
     {
         Say();
@@ -166,6 +204,12 @@ public abstract class Node
         IsComplete = true;
         Summary();
         Say();
+
+        if (_bruteForced == 0)
+            Say($"Brute-forced challenges: 0/{_questions.Count} - a clean run!", TermColor.Success);
+        else
+            Say($"Brute-forced challenges: {_bruteForced}/{_questions.Count}", TermColor.Warn);
+
         Say("Type 'next' to move on.", TermColor.Warn);
         Host.SetNext("type 'next' to move on.");
     }

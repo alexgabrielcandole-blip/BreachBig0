@@ -39,7 +39,8 @@ public class Node1_Constant : Node
         Say();
         Say("Watch the STEP COUNTER on the right: it counts what your code costs.");
         Say("Wrong answers raise your TRACE. At 100% you're caught and the node");
-        Say("restarts. 'hint' helps, but it raises trace too.");
+        Say("restarts. 'hint' helps, but it raises trace too. Really stuck?");
+        Say("BRUTE FORCE shows the answer and why, for +25% trace.");
         Say();
         Say("WORKED EXAMPLE", TermColor.Warn);
         Say("  int[] codes = { 7, 14, 21, 28 };");
@@ -65,11 +66,13 @@ public class Node1_Constant : Node
                 Host.SetNext($"type the C# that fetches the value {target}.");
             },
             Validate = input => CheckIndexAnswer(input, "numbers", _shelfIndex, shelfText),
-            Solved = () =>
+            Solved = () => ShowIndexRun(target),
+            Reveal = () =>
             {
-                Run(1);
-                Say($"> numbers[{_shelfIndex}]  =  {target}      [1 step]", TermColor.Success);
-                Say($"A scan from the start would have taken {_shelfIndex + 1} steps.");
+                Say($"ANSWER: numbers[{_shelfIndex}]", TermColor.Success);
+                Say($"Positions start at 0 (10 is at 0, 20 at 1, 30 at 2...),");
+                Say($"so the value {target} sits at position {_shelfIndex}.");
+                ShowIndexRun(target);
             },
             Hints = new[]
             {
@@ -96,16 +99,18 @@ public class Node1_Constant : Node
                     return "That's what a scan would cost. A direct lookup jumps straight to the position.";
                 return "It still takes 1 step to do the lookup, not zero.";
             },
-            Solved = () =>
+            Solved = ShowHugeRun,
+            Reveal = () =>
             {
-                Run(1);
-                Say("> 1,000,000 items  ->  1 step", TermColor.Success);
-                Say("Same cost as 5 items. The size doesn't matter.");
+                Say("ANSWER: 1", TermColor.Success);
+                Say("A direct lookup doesn't walk past the other items: it jumps to the");
+                Say("position. So the cost doesn't depend on how many items there are.");
+                ShowHugeRun();
             },
             Hints = new[]
             {
                 "Does the computer walk past the other items, or jump straight to the position?",
-                "A jump is 1 step. The size of the shelf doesn't change that."
+                "Think about how the cost changes as the shelf gets bigger."
             }
         };
 
@@ -126,11 +131,12 @@ public class Node1_Constant : Node
                 if (!int.TryParse(Norm(input), out int n)) return "Type just the number.";
                 return n == sum ? null : "Not quite. Add them again.";
             },
-            Solved = () =>
+            Solved = () => ShowAddRun(sum),
+            Reveal = () =>
             {
-                Run(1);
-                Say($"> sum = {sum}      [1 step]", TermColor.Success);
-                Say("One addition is 1 step, however big the numbers are.");
+                Say($"ANSWER: {sum}", TermColor.Success);
+                Say($"sum = a + b = {_runeA} + {_runeB} = {sum}.");
+                ShowAddRun(sum);
             },
             Hints = new[]
             {
@@ -150,22 +156,17 @@ public class Node1_Constant : Node
                 Host.SetNext("type the C# that gets the first fruit.");
             },
             Validate = input => CheckIndexAnswer(input, "fruits", 0, Fruits),
-            Solved = () =>
+            Solved = ShowFirstItemRun,
+            Reveal = () =>
             {
-                Run(1);
-                Say("> fruits[0]  =  \"Apple\"      [1 step]", TermColor.Success);
-                Say("Now the crate keeps growing:");
-                foreach (int n in new[] { 3, 30, 300, 3000 })
-                {
-                    Run(1);
-                    Say($"  crate with {n,4} items  ->  1 step", TermColor.Success);
-                }
-                Say("The crate grew 1000x. The steps didn't.");
+                Say("ANSWER: fruits[0]", TermColor.Success);
+                Say("Arrays count from 0, so the first item is at position 0.");
+                ShowFirstItemRun();
             },
             Hints = new[]
             {
                 "You want the item at the very start. Which position is that?",
-                "The first position is 0. Use the form fruits[position]."
+                "Arrays count from 0, not 1. Build it as fruits[...] with the first item's position."
             }
         };
 
@@ -187,12 +188,53 @@ public class Node1_Constant : Node
                 return "Write it like O(...), for example O(n) or O(log n).";
             },
             Solved = () => Say("Correct: O(1) = constant time.", TermColor.Success),
+            Reveal = () =>
+            {
+                Say("ANSWER: O(1)", TermColor.Success);
+                Say("Constant time: the work stays the same however big the data gets.");
+            },
             Hints = new[]
             {
                 "Does the work grow when the shelf grows?",
                 "Constant means a fixed number of steps. What number goes inside O( )?"
             }
         };
+    }
+
+    // ----- The "runs" shown after a solved (or brute-forced) challenge -----
+
+    private void ShowIndexRun(int target)
+    {
+        Run(1);
+        Say($"> numbers[{_shelfIndex}]  =  {target}      [1 step]", TermColor.Success);
+        Say($"A scan from the start would have taken {_shelfIndex + 1} steps.");
+    }
+
+    private void ShowHugeRun()
+    {
+        Run(1);
+        Say("> 1,000,000 items  ->  1 step", TermColor.Success);
+        Say("Same cost as 5 items. The size doesn't matter.");
+    }
+
+    private void ShowAddRun(int sum)
+    {
+        Run(1);
+        Say($"> sum = {sum}      [1 step]", TermColor.Success);
+        Say("One addition is 1 step, however big the numbers are.");
+    }
+
+    private void ShowFirstItemRun()
+    {
+        Run(1);
+        Say("> fruits[0]  =  \"Apple\"      [1 step]", TermColor.Success);
+        Say("Now the crate keeps growing:");
+        foreach (int n in new[] { 3, 30, 300, 3000 })
+        {
+            Run(1);
+            Say($"  crate with {n,4} items  ->  1 step", TermColor.Success);
+        }
+        Say("The crate grew 1000x. The steps didn't.");
     }
 
     protected override void Summary()
