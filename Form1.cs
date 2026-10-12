@@ -17,13 +17,14 @@ public partial class Form1 : Form, INodeHost
     private readonly StepCounter _steps = new();
     private readonly TraceMeter _trace = new();
 
-    // One entry per node. Node 5 gets added here in the next round.
+    // One entry per node, in play order.
     private readonly List<Func<INodeHost, Node>> _nodeFactories = new()
     {
         host => new Node1_Constant(host),
         host => new Node2_Logarithmic(host),
         host => new Node3_Linear(host),
         host => new Node4_Quadratic(host),
+        host => new Node5_Exponential(host),
     };
 
     private Node? _node;                // the node being played
@@ -41,7 +42,7 @@ public partial class Form1 : Form, INodeHost
 
     private void Form1_Load(object? sender, EventArgs e)
     {
-        PrintLine("BREACH v0.3  //  Big-O Terminal", Green);
+        PrintLine("BREACH v0.4  //  Big-O Terminal", Green);
         PrintLine("Break into 5 systems. Each one runs on a different Big-O class.", White);
         PrintLine("Type answers at the prompt. Type 'help' any time.", White);
         StartNode(0);
@@ -161,7 +162,7 @@ public partial class Form1 : Form, INodeHost
 
         if (!_node.CanBruteForce)
         {
-            PrintLine("Brute force isn't available for this challenge yet.", Amber);
+            PrintLine("Brute force isn't available for this challenge.", Amber);
             return;
         }
 
@@ -191,7 +192,7 @@ public partial class Form1 : Form, INodeHost
 
         if (_nodeIndex + 1 >= _nodeFactories.Count)
         {
-            PrintLine("That's every node built so far. The next one arrives next round.", Amber);
+            PrintLine("That was the last node! The title screen and final scoreboard come in the polish round.", Amber);
             return;
         }
 
