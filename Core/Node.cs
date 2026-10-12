@@ -17,8 +17,9 @@ public interface INodeHost
     StepCounter Steps { get; }
     TraceMeter Trace { get; }
     void Print(string text = "", TermColor color = TermColor.Normal);
-    void SetNext(string text);      // the always-visible "NEXT:" bar
-    void SetBest(int? best);        // the "best" half of "YOUR STEPS / BEST"
+    void SetNext(string text);          // the always-visible "NEXT:" bar
+    void SetBest(int? best);            // the "best" half of "YOUR STEPS / BEST"
+    void Record(GameEvent e);           // feeds the final scoreboard
 }
 
 /// <summary>
@@ -77,6 +78,9 @@ public abstract class Node
 
     public bool IsComplete { get; private set; }
     public string Prompt => $"root@node{Number}>";
+
+    /// <summary>How many challenges this node has.</summary>
+    public int ChallengeCount => _questions.Count;
 
     /// <summary>True when the current challenge has a Reveal.</summary>
     public bool CanBruteForce =>
@@ -154,6 +158,7 @@ public abstract class Node
 
         Say("[HINT] " + hint, TermColor.Warn);
         _hintsUsed++;
+        Host.Record(GameEvent.Hint);
         AddTrace(TraceMeter.HintCost);
     }
 
@@ -170,6 +175,7 @@ public abstract class Node
         }
 
         _bruteForced++;
+        Host.Record(GameEvent.BruteForce);
         Say("[BRUTE FORCE] Skipping the thinking...", TermColor.Warn);
         AddTrace(BruteForceCost);
         _questions[_index].Reveal!();
@@ -214,7 +220,11 @@ public abstract class Node
         Host.SetNext("type 'next' to move on.");
     }
 
-    private void PenalizeWrong() => AddTrace(TraceMeter.WrongAnswerCost);
+    private void PenalizeWrong()
+    {
+        Host.Record(GameEvent.WrongAnswer);
+        AddTrace(TraceMeter.WrongAnswerCost);
+    }
 
     // ----- Helpers for the nodes -----
     protected void Say(string text = "", TermColor color = TermColor.Normal) => Host.Print(text, color);
