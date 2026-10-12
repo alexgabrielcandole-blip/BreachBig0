@@ -17,12 +17,13 @@ public partial class Form1 : Form, INodeHost
     private readonly StepCounter _steps = new();
     private readonly TraceMeter _trace = new();
 
-    // One entry per node. Nodes 4-5 get added here in later rounds.
+    // One entry per node. Node 5 gets added here in the next round.
     private readonly List<Func<INodeHost, Node>> _nodeFactories = new()
     {
         host => new Node1_Constant(host),
         host => new Node2_Logarithmic(host),
         host => new Node3_Linear(host),
+        host => new Node4_Quadratic(host),
     };
 
     private Node? _node;                // the node being played
